@@ -7,13 +7,24 @@
 
     <link rel="stylesheet" href="stylesheets/styles.css">
     <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <link rel="stylesheet" href="stylesheets/demo.css">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <!--[if lt IE 9]>
     <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.5.1/jquery.min.js"></script>
     <![endif]-->
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.5.1/jquery.min.js"></script>
+    <script src="js/three.js"></script>
+    <script type='text/javascript' src='js/dat.gui.js'></script>
+    <script type='text/javascript' src='js/trilinear.js'></script>
+    <script type='text/javascript' src='js/sampling.js'></script>
+    <script type='text/javascript' src='js/tricubic.js'></script>
+
   </head>
   <body>
-    <div class="wrapper">
+    <div id="wrapper_id" class="wrapper">
+      
       <header>
         <h1>Interpolants</h1>
         <p>Small webgl app developed to help users comparing the trilinear and tricubic interpolants.</p>
@@ -28,39 +39,489 @@
         </ul>
       </header>
       <section>
-        <h3>Welcome to GitHub Pages.</h3>
 
-<p>This automatic page generator is the easiest way to create beautiful pages for all of your projects. Author your page content here using GitHub Flavored Markdown, select a template crafted by a designer, and publish. After your page is generated, you can check out the new branch:</p>
+	<h3>Trilinear vs. Tricubic surfaces</h3>
 
-<pre><code>$ cd your_repo_root/repo_name
-$ git fetch origin
-$ git checkout gh-pages
-</code></pre>
+	<div id="half_row">
+		<div id="half_rect">
+			<p> This simple WebGL application shows the isosurface for different voxel configurations using <emph>trilinear</emph> and </emph> tricubic funcions. If you cannot see a WebGL app, go to <a href="http://get.webgl.org/">this page</a>.</p>
+			<p> Orange dots correspond to scalar values greater than the value of the isosurface of interest, whereas white dots correspond to lower scalar values. The button <em>Apply</em> changes the isovalue of interest and <em>Randomize</em> assigns random values to the 27 vertices of the 3x3x3 voxels (only the voxel at the center in shown). 
+			</p>
+		</div>
+	</div>
 
-<p>If you're using the GitHub for Mac, simply sync your repository and you'll see the new branch.</p>
+	<p>
+	<div id="double_row">
+		<div id="double_box">
+			<div id="tile_doublebox"></div>
+		</div>	
+	</div>
+	</p>
+	
+<script type="text/javascript">
+	var camera, scene, renderer;
+	var geometry, material;	
+	var parameters;
+	
+	var points = []
+	var meshPoints = []
+	
+	var numberOfIsosurfacePoints = 3000;
+	var ps_trilinear;
+	var ps_tricubic;
+	var scalar_field;
+	var gui;
+		    
+	function render() {
+		renderer.render( scene, camera );
+		
+		ps_trilinear.visible = parameters.ShowTrilinear;
+		ps_tricubic.visible  = parameters.ShowTricubic;
+	}
 
-<h3>Designer Templates</h3>
+	function buildVoxel() {
+	
+		var mat = new THREE.MeshBasicMaterial( { color: 0xffffff, wireframe : true } );
+		cubemesh = new THREE.Mesh( new THREE.CubeGeometry( 1, 1, 1 ), mat );
+		cubemesh.position.x += 0.5;
+		cubemesh.position.y += 0.5;
+		cubemesh.position.z += 0.5;
+		cubemesh.overdraw = true;
+		scene.add( cubemesh );
+	}
+	
+	function buildVoxelVertices() {
+		for(k = 0; k < 2; ++k)
+			for(j = 0; j < 2; ++j)
+				for(i = 0; i < 2; ++i) {
+					points.push(new THREE.Vector3(i, j, k));
+					meshPoints.push(buildPoints(i, j, k));
+				}
+	}
+		
+	function buildPoints(x, y, z) {
+		var mat;
+		var mesh;
+		
+		if(x < 0 || y < 0 || z < 0 || x > 1 || y > 1 || z > 1)
+			return null;
+		
+		if(trilinear.f(x,y,z) > trilinear.iso)
+			mat = new THREE.MeshBasicMaterial( { color: 0xffa500 } );
+		else
+			mat = new THREE.MeshBasicMaterial( { color: 0xffffff } );
+		mat.needsUpdate = true;
+		
+		var mesh = new THREE.Mesh( new THREE.SphereGeometry(0.02), mat );
+		mesh.position.x += x;
+		mesh.position.y += y;
+		mesh.position.z += z;
+		scene.add( mesh );
+		
+		return mesh;
+	}
 
-<p>We've crafted some handsome templates for you to use. Go ahead and continue to layouts to browse through them. You can easily go back to edit your page before publishing. After publishing your page, you can revisit the page generator and switch to another theme. Your Page content will be preserved if it remained markdown format.</p>
+	function update_implicit_function() {
+		var iii = 0;
+		var scalar_field_raw_data = [];
+	
+		scalar_field_raw_data[iii++] = parameters.f000;
+		scalar_field_raw_data[iii++] = parameters.f001;
+		scalar_field_raw_data[iii++] = parameters.f002;
+		scalar_field_raw_data[iii++] = parameters.f003;
+		scalar_field_raw_data[iii++] = parameters.f010;
+		scalar_field_raw_data[iii++] = parameters.f011;
+		scalar_field_raw_data[iii++] = parameters.f012;
+		scalar_field_raw_data[iii++] = parameters.f013;
+		scalar_field_raw_data[iii++] = parameters.f020;
+		scalar_field_raw_data[iii++] = parameters.f021;
+		scalar_field_raw_data[iii++] = parameters.f022;
+		scalar_field_raw_data[iii++] = parameters.f023;
+		scalar_field_raw_data[iii++] = parameters.f030;
+		scalar_field_raw_data[iii++] = parameters.f031;
+		scalar_field_raw_data[iii++] = parameters.f032;
+		scalar_field_raw_data[iii++] = parameters.f033;
+		scalar_field_raw_data[iii++] = parameters.f100;
+		scalar_field_raw_data[iii++] = parameters.f101;
+		scalar_field_raw_data[iii++] = parameters.f102;
+		scalar_field_raw_data[iii++] = parameters.f103;
+		scalar_field_raw_data[iii++] = parameters.f110;
+		scalar_field_raw_data[iii++] = parameters.f111;
+		scalar_field_raw_data[iii++] = parameters.f112;
+		scalar_field_raw_data[iii++] = parameters.f113;
+		scalar_field_raw_data[iii++] = parameters.f120;
+		scalar_field_raw_data[iii++] = parameters.f121;
+		scalar_field_raw_data[iii++] = parameters.f122;
+		scalar_field_raw_data[iii++] = parameters.f123;
+		scalar_field_raw_data[iii++] = parameters.f130;
+		scalar_field_raw_data[iii++] = parameters.f131;
+		scalar_field_raw_data[iii++] = parameters.f132;
+		scalar_field_raw_data[iii++] = parameters.f133;
+		scalar_field_raw_data[iii++] = parameters.f200;
+		scalar_field_raw_data[iii++] = parameters.f201;
+		scalar_field_raw_data[iii++] = parameters.f202;
+		scalar_field_raw_data[iii++] = parameters.f203;
+		scalar_field_raw_data[iii++] = parameters.f210;
+		scalar_field_raw_data[iii++] = parameters.f211;
+		scalar_field_raw_data[iii++] = parameters.f212;
+		scalar_field_raw_data[iii++] = parameters.f213;
+		scalar_field_raw_data[iii++] = parameters.f220;
+		scalar_field_raw_data[iii++] = parameters.f221;
+		scalar_field_raw_data[iii++] = parameters.f222;
+		scalar_field_raw_data[iii++] = parameters.f223;
+		scalar_field_raw_data[iii++] = parameters.f230;
+		scalar_field_raw_data[iii++] = parameters.f231;
+		scalar_field_raw_data[iii++] = parameters.f232;
+		scalar_field_raw_data[iii++] = parameters.f233;
+		scalar_field_raw_data[iii++] = parameters.f300;
+		scalar_field_raw_data[iii++] = parameters.f301;
+		scalar_field_raw_data[iii++] = parameters.f302;
+		scalar_field_raw_data[iii++] = parameters.f303;
+		scalar_field_raw_data[iii++] = parameters.f310;
+		scalar_field_raw_data[iii++] = parameters.f311;
+		scalar_field_raw_data[iii++] = parameters.f312;
+		scalar_field_raw_data[iii++] = parameters.f313;
+		scalar_field_raw_data[iii++] = parameters.f320;
+		scalar_field_raw_data[iii++] = parameters.f321;
+		scalar_field_raw_data[iii++] = parameters.f322;
+		scalar_field_raw_data[iii++] = parameters.f323;
+		scalar_field_raw_data[iii++] = parameters.f330;
+		scalar_field_raw_data[iii++] = parameters.f331;
+		scalar_field_raw_data[iii++] = parameters.f332;
+		scalar_field_raw_data[iii++] = parameters.f333;
+	
+		scalar_field = sampling.build_grid(scalar_field_raw_data);		
+		trilinear.init(scalar_field);
+		tricubic.init(scalar_field);
+	}
 
-<h3>Rather Drive Stick?</h3>
+	function update_isosurface()  {	
+		update_implicit_function();
+	
+		scene.remove(ps_trilinear);
+		scene.remove(ps_tricubic);
+		
+		trilinear.iso = parameters.Isovalue;
+		tricubic.iso  = parameters.Isovalue;
+		
+		ps_trilinear = sampling.build_particle_system(numberOfIsosurfacePoints, false);
+		scene.add(ps_trilinear);			
+		sampling.sample(trilinear, ps_trilinear.geometry.vertices);
 
-<p>If you prefer to not use the automatic generator, push a branch named <code>gh-pages</code> to your repository to create a page manually. In addition to supporting regular HTML content, GitHub Pages support Jekyll, a simple, blog aware static site generator written by our own Tom Preston-Werner. Jekyll makes it easy to create site-wide headers and footers without having to copy them across every page. It also offers intelligent blog support and other advanced templating features.</p>
+		ps_tricubic = sampling.build_particle_system(numberOfIsosurfacePoints, false);
+		scene.add(ps_tricubic);			
+		sampling.sample(tricubic, ps_tricubic.geometry.vertices);
+	}
+	
 
-<h3>Authors and Contributors</h3>
+	function randomize() {
+		var array = sampling.random(-1, +1, 64);
+		var iii = 0;
+		parameters.f000 = array[iii++];
+		parameters.f001 = array[iii++];
+		parameters.f002 = array[iii++];
+		parameters.f003 = array[iii++];
+		parameters.f010 = array[iii++];
+		parameters.f011 = array[iii++];
+		parameters.f012 = array[iii++];
+		parameters.f013 = array[iii++];
+		parameters.f020 = array[iii++];
+		parameters.f021 = array[iii++];
+		parameters.f022 = array[iii++];
+		parameters.f023 = array[iii++];
+		parameters.f030 = array[iii++];
+		parameters.f031 = array[iii++];
+		parameters.f032 = array[iii++];
+		parameters.f033 = array[iii++];
+		parameters.f100 = array[iii++];
+		parameters.f101 = array[iii++];
+		parameters.f102 = array[iii++];
+		parameters.f103 = array[iii++];
+		parameters.f110 = array[iii++];
+		parameters.f111 = array[iii++];
+		parameters.f112 = array[iii++];
+		parameters.f113 = array[iii++];
+		parameters.f120 = array[iii++];
+		parameters.f121 = array[iii++];
+		parameters.f122 = array[iii++];
+		parameters.f123 = array[iii++];
+		parameters.f130 = array[iii++];
+		parameters.f131 = array[iii++];
+		parameters.f132 = array[iii++];
+		parameters.f133 = array[iii++];
+		parameters.f200 = array[iii++];
+		parameters.f201 = array[iii++];
+		parameters.f202 = array[iii++];
+		parameters.f203 = array[iii++];
+		parameters.f210 = array[iii++];
+		parameters.f211 = array[iii++];
+		parameters.f212 = array[iii++];
+		parameters.f213 = array[iii++];
+		parameters.f220 = array[iii++];
+		parameters.f221 = array[iii++];
+		parameters.f222 = array[iii++];
+		parameters.f223 = array[iii++];
+		parameters.f230 = array[iii++];
+		parameters.f231 = array[iii++];
+		parameters.f232 = array[iii++];
+		parameters.f233 = array[iii++];
+		parameters.f300 = array[iii++];
+		parameters.f301 = array[iii++];
+		parameters.f302 = array[iii++];
+		parameters.f303 = array[iii++];
+		parameters.f310 = array[iii++];
+		parameters.f311 = array[iii++];
+		parameters.f312 = array[iii++];
+		parameters.f313 = array[iii++];
+		parameters.f320 = array[iii++];
+		parameters.f321 = array[iii++];
+		parameters.f322 = array[iii++];
+		parameters.f323 = array[iii++];
+		parameters.f330 = array[iii++];
+		parameters.f331 = array[iii++];
+		parameters.f332 = array[iii++];
+		parameters.f333 = array[iii++];	
+	}
 
-<p>You can <a href="https://github.com/blog/821" class="user-mention">@mention</a> a GitHub username to generate a link to their profile. The resulting <code>&lt;a&gt;</code> element will link to the contributor's GitHub Profile. For example: In 2007, Chris Wanstrath (<a href="https://github.com/defunkt" class="user-mention">@defunkt</a>), PJ Hyett (<a href="https://github.com/pjhyett" class="user-mention">@pjhyett</a>), and Tom Preston-Werner (<a href="https://github.com/mojombo" class="user-mention">@mojombo</a>) founded GitHub.</p>
+	var FizzyText = function() {
+	
+	  this.Isovalue = 0.01;
+	  this.Apply = function() { update_isosurface(); };
+	  this.Randomize = function() { randomize(); update_isosurface(); };
+	  this.ShowTrilinear = true;
+	  this.ShowTricubic  = true;
+	  
+	  this.f000 = 1E-10;
+	  this.f001 = 1E-10;
+	  this.f002 = 1E-10;
+	  this.f003 = 1E-10;
+	  this.f010 = 1E-10;
+	  this.f011 = 1E-10;
+	  this.f012 = 1E-10;
+	  this.f013 = 1E-10;
+	  this.f020 = 1E-10;
+	  this.f021 = 1E-10;
+	  this.f022 = 1E-10;
+	  this.f023 = 1E-10;
+	  this.f030 = 1E-10;
+	  this.f031 = 1E-10;
+	  this.f032 = 1E-10;
+	  this.f033 = 1E-10;
+	  this.f100 = 1E-10;
+	  this.f101 = 1E-10;
+	  this.f102 = 1E-10;
+	  this.f103 = 1E-10;
+	  this.f110 = 1E-10;
+	  this.f111 = 1E-10;
+	  this.f112 = 1E-10;
+	  this.f113 = 1E-10;
+	  this.f120 = 1E-10;
+	  this.f121 = 1E-10;
+	  this.f122 = 1E-10;
+	  this.f123 = 1E-10;
+	  this.f130 = 1E-10;
+	  this.f131 = 1E-10;
+	  this.f132 = 1E-10;
+	  this.f133 = 1E-10;
+	  this.f200 = 1E-10;
+	  this.f201 = 1E-10;
+	  this.f202 = 1E-10;
+	  this.f203 = 1E-10;
+	  this.f210 = 1E-10;
+	  this.f211 = 1E-10;
+	  this.f212 = 1E-10;
+	  this.f213 = 1E-10;
+	  this.f220 = 1E-10;
+	  this.f221 = 1E-10;
+	  this.f222 = 1E-10;
+	  this.f223 = 1E-10;
+	  this.f230 = 1E-10;
+	  this.f231 = 1E-10;
+	  this.f232 = 1E-10;
+	  this.f233 = 1E-10;
+	  this.f300 = 1E-10;
+	  this.f301 = 1E-10;
+	  this.f302 = 1E-10;
+	  this.f303 = 1E-10;
+	  this.f310 = 1E-10;
+	  this.f311 = 1E-10;
+	  this.f312 = 1E-10;
+	  this.f313 = 1E-10;
+	  this.f320 = 1E-10;
+	  this.f321 = 1E-10;
+	  this.f322 = 1E-10;
+	  this.f323 = 1E-10;
+	  this.f330 = 1E-10;
+	  this.f331 = 1E-10;
+	  this.f332 = 1E-10;
+	  this.f333 = 1E-10;  
+	};
+	
+	function HUD() {	
+		parameters = new FizzyText();
+		gui = new dat.GUI({ autoPlace: false });
+		gui.remember(parameters);
 
-<h3>Support or Contact</h3>
+		gui.add(parameters, 'Isovalue', -1., +1.).step(0.001);
+		gui.add(parameters, 'Apply');
+		gui.add(parameters, 'Randomize');		
+		gui.add(parameters, 'ShowTrilinear');
+		gui.add(parameters, 'ShowTricubic');
+		
+		c = gui.add(parameters, 'f000').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f001').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f002').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f003').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f010').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f011').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f012').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f013').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f020').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f021').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f022').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f023').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f030').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f031').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f032').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f033').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f100').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f101').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f102').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f103').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f110').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f111').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f112').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f113').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f120').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f121').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f122').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f123').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f130').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f131').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f132').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f133').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f200').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f201').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f202').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f203').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f210').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f211').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f212').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f213').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f220').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f221').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f222').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f223').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f230').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f231').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f232').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f233').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f300').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f301').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f302').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f303').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f310').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f311').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f312').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f313').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f320').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f321').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f322').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f323').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f330').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f331').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f332').listen(); c.__li.style.display = 'none';
+		c = gui.add(parameters, 'f333').listen(); c.__li.style.display = 'none';
 
-<p>Having trouble with Pages? Check out the documentation at <a href="http://help.github.com/pages">http://help.github.com/pages</a> or contact <a href="mailto:support@github.com">support@github.com</a> and we’ll help you sort it out.</p>
-      </section>
-      <footer>
-        <p>This project is maintained by <a href="https://github.com/tiagoetiene">tiagoetiene</a></p>
-        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
-      </footer>
-    </div>
-    <script src="javascripts/scale.fix.js"></script>
-    
-  </body>
+		var guiContainer = document.createElement("GUI");
+		guiContainer.style.position = "absolute";
+		guiContainer.appendChild(gui.domElement);
+		double_box.appendChild(guiContainer);
+		
+		randomize();
+	}
+
+	function init() {		
+			container       = document.getElementById('wrapper_id');
+			double_row      = document.getElementById('double_row');
+			double_box      = document.getElementById('double_box');
+			tile_double_box = document.getElementById('tile_doublebox');
+						
+			document.body.appendChild(container);
+			container.appendChild(double_row);
+			double_row.appendChild(double_box);
+			double_box.appendChild(tile_double_box);
+	
+			try {
+				renderer = new THREE.WebGLRenderer();		
+			}catch(err)
+			{
+				tile_double_box.style.background = "#fff no-repeat center center";
+				tile_double_box.style.webkitBoxShadow = "0px 0px 5px 1px rgba(0, 0, 0, 1)";
+				tile_double_box.style.boxShadow = "0px 0px 5px 1px rgba(0, 0, 0, 1);";
+				tile_double_box.style.backgroundSize = "550px";
+				tile_double_box.innerHTML = "<p style=\"text-align: center;\"><br/><br/><br/><br/><br/><br/><br/><br/><br/><br/><br/><br/>Your browser does not support WebGL</p>";
+				
+				return;
+			}
+							
+			HUD();
+			
+			height = tile_double_box.offsetHeight;
+			width  = tile_double_box.offsetWidth;
+						
+	        camera = new THREE.PerspectiveCamera( 75, width / height, 0.1, 10000 );
+	        camera.position.x = 0.5;
+	        camera.position.y = 0.5;
+	        camera.position.z = 2;
+	
+			scene = new THREE.Scene();
+			scene.add(camera)
+					
+			renderer.setSize( width, height );
+			renderer.render(scene, camera)
+			tile_double_box.appendChild( renderer.domElement );
+			
+			controls = new THREE.TrackballControls( camera, renderer.domElement );	
+			controls.rotateSpeed = 1.0;
+			controls.zoomSpeed = 1.2;
+			controls.panSpeed = 0.8;
+			controls.noZoom = true;
+			controls.noPan = true;
+			controls.staticMoving = true;
+			controls.dynamicDampingFactor = 0.3;
+			controls.keys = [ 65, 83, 68 ];
+			controls.addEventListener( 'change', render );
+			controls.target = new THREE.Vector3(0.5, 0.5, 0.5);
+	
+			update_implicit_function();
+			
+			ps_trilinear = sampling.build_particle_system(numberOfIsosurfacePoints, false);
+			scene.add(ps_trilinear);			
+			sampling.sample(trilinear, ps_trilinear.geometry.vertices);
+
+			ps_tricubic = sampling.build_particle_system(numberOfIsosurfacePoints, false);
+			scene.add(ps_tricubic);			
+			sampling.sample(tricubic, ps_tricubic.geometry.vertices);
+
+			
+	        buildVoxel();
+	        buildVoxelVertices();
+			animate();
+	    }
+
+	init();
+	
+	function animate() {	
+		controls.update();
+		trilinear.iso = parameters.Isovalue;
+		tricubic.iso  = parameters.Isovalue;
+		render();
+		requestAnimationFrame( animate );
+	}
+	
+</script>
+</div>
+</div>    
+</body>
 </html>

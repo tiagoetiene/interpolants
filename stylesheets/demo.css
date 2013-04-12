@@ -1,0 +1,17 @@
+#double_row { 
+	position: relative;
+}
+
+#double_box {
+	width               : 500px;
+	height              : 500px;
+	float	            : right;
+}
+
+#tile_doublebox
+{
+	margin				: 5px;
+	width				: 490px;
+	height				: 490px;
+	background-color	: #333333;	
+}
